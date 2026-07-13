@@ -106,4 +106,77 @@
     addEventListener("resize", onScroll, { passive: true });
     applyParallax();
   }
+
+  /* ── pulse meter ── */
+  const RED_SELECTOR = "#contact"; // section whose TOP edge the water-fill tracks
+  const PULSE_BASE = { visitors: 53, downloads: 16, thumbs: 22 }; // starting dummy numbers
+  const PULSE_LS = { v: "pulse-visitors", vf: "pulse-visited", d: "pulse-downloads", t: "pulse-thumbs", tf: "pulse-thumbed" };
+
+  function pulseNum(key, def) {
+    const x = parseInt(localStorage.getItem(key), 10);
+    return isFinite(x) ? x : def;
+  }
+  function pulseSetAll(metric, val) {
+    document.querySelectorAll('[data-metric="' + metric + '"]').forEach((el) => { el.textContent = val; });
+  }
+
+  let pulseVisitors = pulseNum(PULSE_LS.v, PULSE_BASE.visitors);
+  if (!localStorage.getItem(PULSE_LS.vf)) {
+    pulseVisitors++;
+    localStorage.setItem(PULSE_LS.v, pulseVisitors);
+    localStorage.setItem(PULSE_LS.vf, "1");
+  }
+  let pulseDownloads = pulseNum(PULSE_LS.d, PULSE_BASE.downloads);
+  let pulseThumbs = pulseNum(PULSE_LS.t, PULSE_BASE.thumbs);
+  let pulseThumbed = localStorage.getItem(PULSE_LS.tf) === "1";
+  pulseSetAll("visitors", pulseVisitors);
+  pulseSetAll("downloads", pulseDownloads);
+  pulseSetAll("thumbs", pulseThumbs);
+
+  function paintPulseThumb() {
+    const base = document.querySelector("[data-thumb-icon]");
+    const inv = document.querySelector("[data-thumb-icon-invert]");
+    if (base) base.setAttribute("fill", pulseThumbed ? "#e23b2e" : "none");
+    if (inv) inv.setAttribute("fill", pulseThumbed ? "#ffffff" : "none");
+  }
+  paintPulseThumb();
+
+  const pulseThumbBtn = document.querySelector("[data-thumb]");
+  if (pulseThumbBtn) {
+    pulseThumbBtn.addEventListener("click", () => {
+      pulseThumbed = !pulseThumbed;
+      pulseThumbs += pulseThumbed ? 1 : -1;
+      localStorage.setItem(PULSE_LS.t, pulseThumbs);
+      localStorage.setItem(PULSE_LS.tf, pulseThumbed ? "1" : "0");
+      pulseSetAll("thumbs", pulseThumbs);
+      paintPulseThumb();
+    });
+  }
+
+  document.querySelectorAll("[data-resume]").forEach((a) => {
+    a.addEventListener("click", () => {
+      pulseDownloads++;
+      localStorage.setItem(PULSE_LS.d, pulseDownloads);
+      pulseSetAll("downloads", pulseDownloads);
+    });
+  });
+
+  const pulseEl = document.querySelector(".pulse");
+  const pulseInvert = pulseEl && pulseEl.querySelector(".pulse-invert");
+  const pulseRed = document.querySelector(RED_SELECTOR);
+  let pulseRaf = null;
+  function pulseTick() {
+    pulseRaf = null;
+    if (!pulseEl || !pulseInvert || !pulseRed) return;
+    if (pulseEl.offsetWidth === 0 && pulseEl.offsetHeight === 0) return; // hidden (mobile)
+    const w = pulseEl.getBoundingClientRect();
+    const redTop = pulseRed.getBoundingClientRect().top;
+    let fill = redTop - w.top; // px of widget still above the red edge
+    fill = Math.max(0, Math.min(w.height, fill));
+    pulseInvert.style.clipPath = "inset(" + fill + "px 0 0 0)";
+  }
+  function schedulePulseTick() { if (!pulseRaf) pulseRaf = requestAnimationFrame(pulseTick); }
+  addEventListener("scroll", schedulePulseTick, { passive: true });
+  addEventListener("resize", schedulePulseTick, { passive: true });
+  pulseTick();
 })();
