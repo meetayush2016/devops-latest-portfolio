@@ -160,21 +160,25 @@
   (function () {
     /* ---- CONFIG ---- */
     var RED_SELECTOR = '#pulse-red';   // the element whose TOP edge the water tracks
-    var BASE = { visitors: 53, downloads: 16, thumbs: 22 };  // starting dummy numbers
-    var LS = { v:'pulse-visitors', vf:'pulse-visited', d:'pulse-downloads', t:'pulse-thumbs', tf:'pulse-thumbed' };
+    var PULSE_API = 'https://ayush-pulse.ayush2252.workers.dev';
+    var SS = { visited: 'pulse-visited-session' };
+    var LS = { tf: 'pulse-thumbed' }; // per-browser thumb state only
 
-    function n(k, def){ var x = parseInt(localStorage.getItem(k),10); return isFinite(x) ? x : def; }
     function setAll(metric, val){
       document.querySelectorAll('[data-metric="'+metric+'"]').forEach(function(el){ el.textContent = val; });
     }
+    function paint(counts){
+      if (!counts) return;
+      setAll('visitors', counts.visitors); setAll('downloads', counts.downloads); setAll('thumbs', counts.thumbs);
+    }
+    function pulseFetch(path, opts){
+      return fetch(PULSE_API + path, opts).then(function(res){
+        if (!res.ok) throw new Error('pulse api error ' + res.status);
+        return res.json();
+      });
+    }
 
-    /* ---- counts (persist per browser) ---- */
-    var visitors = n(LS.v, BASE.visitors);
-    if (!localStorage.getItem(LS.vf)) { visitors++; localStorage.setItem(LS.v, visitors); localStorage.setItem(LS.vf,'1'); }
-    var downloads = n(LS.d, BASE.downloads);
-    var thumbs = n(LS.t, BASE.thumbs);
     var thumbed = localStorage.getItem(LS.tf) === '1';
-    setAll('visitors', visitors); setAll('downloads', downloads); setAll('thumbs', thumbs);
 
     function paintThumb(){
       var base = document.querySelector('[data-thumb-icon]');
@@ -188,15 +192,29 @@
     var btn = document.querySelector('[data-thumb]');
     if (btn) btn.addEventListener('click', function(){
       thumbed = !thumbed;
-      thumbs += thumbed ? 1 : -1;
-      localStorage.setItem(LS.t, thumbs); localStorage.setItem(LS.tf, thumbed ? '1':'0');
-      setAll('thumbs', thumbs); paintThumb();
+      localStorage.setItem(LS.tf, thumbed ? '1':'0');
+      paintThumb();
+      pulseFetch('/pulse/thumb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: thumbed ? 'inc' : 'dec' })
+      }).then(paint).catch(function(){});
     });
 
-    /* count résumé downloads — add [data-resume] to your résumé links to enable
-       document.querySelectorAll('[data-resume]').forEach(function(a){
-         a.addEventListener('click', function(){ downloads++; localStorage.setItem(LS.d, downloads); setAll('downloads', downloads); });
-       }); */
+    /* count résumé downloads — add [data-resume] to your résumé links to enable */
+    document.querySelectorAll('[data-resume]').forEach(function(a){
+      a.addEventListener('click', function(){
+        pulseFetch('/pulse/download', { method: 'POST' }).then(paint).catch(function(){});
+      });
+    });
+
+    /* ---- initial load + live polling ---- */
+    pulseFetch('/pulse').then(paint).catch(function(){});
+    if (!sessionStorage.getItem(SS.visited)) {
+      sessionStorage.setItem(SS.visited, '1');
+      pulseFetch('/pulse/visit', { method: 'POST' }).then(paint).catch(function(){});
+    }
+    setInterval(function(){ pulseFetch('/pulse').then(paint).catch(function(){}); }, 25000);
 
     /* ---- scroll-driven water-fill ---- */
     var pulse = document.querySelector('.pulse');

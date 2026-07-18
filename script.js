@@ -109,29 +109,26 @@
 
   /* ── pulse meter ── */
   const RED_SELECTOR = "#contact"; // section whose TOP edge the water-fill tracks
-  const PULSE_BASE = { visitors: 53, downloads: 16, thumbs: 22 }; // starting dummy numbers
-  const PULSE_LS = { v: "pulse-visitors", vf: "pulse-visited", d: "pulse-downloads", t: "pulse-thumbs", tf: "pulse-thumbed" };
+  const PULSE_API = "https://ayush-pulse.ayush2252.workers.dev";
+  const PULSE_SS = { visited: "pulse-visited-session" };
+  const PULSE_LS = { t: "pulse-thumbs-mine", tf: "pulse-thumbed" }; // per-browser thumb state only
 
-  function pulseNum(key, def) {
-    const x = parseInt(localStorage.getItem(key), 10);
-    return isFinite(x) ? x : def;
-  }
   function pulseSetAll(metric, val) {
     document.querySelectorAll('[data-metric="' + metric + '"]').forEach((el) => { el.textContent = val; });
   }
-
-  let pulseVisitors = pulseNum(PULSE_LS.v, PULSE_BASE.visitors);
-  if (!localStorage.getItem(PULSE_LS.vf)) {
-    pulseVisitors++;
-    localStorage.setItem(PULSE_LS.v, pulseVisitors);
-    localStorage.setItem(PULSE_LS.vf, "1");
+  function pulsePaint(counts) {
+    if (!counts) return;
+    pulseSetAll("visitors", counts.visitors);
+    pulseSetAll("downloads", counts.downloads);
+    pulseSetAll("thumbs", counts.thumbs);
   }
-  let pulseDownloads = pulseNum(PULSE_LS.d, PULSE_BASE.downloads);
-  let pulseThumbs = pulseNum(PULSE_LS.t, PULSE_BASE.thumbs);
+  async function pulseFetch(path, opts) {
+    const res = await fetch(PULSE_API + path, opts);
+    if (!res.ok) throw new Error("pulse api error " + res.status);
+    return res.json();
+  }
+
   let pulseThumbed = localStorage.getItem(PULSE_LS.tf) === "1";
-  pulseSetAll("visitors", pulseVisitors);
-  pulseSetAll("downloads", pulseDownloads);
-  pulseSetAll("thumbs", pulseThumbs);
 
   function paintPulseThumb() {
     const base = document.querySelector("[data-thumb-icon]");
@@ -145,21 +142,37 @@
   if (pulseThumbBtn) {
     pulseThumbBtn.addEventListener("click", () => {
       pulseThumbed = !pulseThumbed;
-      pulseThumbs += pulseThumbed ? 1 : -1;
-      localStorage.setItem(PULSE_LS.t, pulseThumbs);
       localStorage.setItem(PULSE_LS.tf, pulseThumbed ? "1" : "0");
-      pulseSetAll("thumbs", pulseThumbs);
       paintPulseThumb();
+      pulseFetch("/pulse/thumb", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: pulseThumbed ? "inc" : "dec" }),
+      }).then(pulsePaint).catch(() => {});
     });
   }
 
   document.querySelectorAll("[data-resume]").forEach((a) => {
     a.addEventListener("click", () => {
-      pulseDownloads++;
-      localStorage.setItem(PULSE_LS.d, pulseDownloads);
-      pulseSetAll("downloads", pulseDownloads);
+      pulseFetch("/pulse/download", { method: "POST" }).then(pulsePaint).catch(() => {});
     });
   });
+
+  (async function pulseInit() {
+    try {
+      const initial = await pulseFetch("/pulse");
+      pulsePaint(initial);
+    } catch (e) { /* leave placeholder markup as-is if the API is unreachable */ }
+
+    if (!sessionStorage.getItem(PULSE_SS.visited)) {
+      sessionStorage.setItem(PULSE_SS.visited, "1");
+      try { pulsePaint(await pulseFetch("/pulse/visit", { method: "POST" })); } catch (e) {}
+    }
+
+    setInterval(() => {
+      pulseFetch("/pulse").then(pulsePaint).catch(() => {});
+    }, 25000);
+  })();
 
   const pulseEl = document.querySelector(".pulse");
   const pulseInvert = pulseEl && pulseEl.querySelector(".pulse-invert");
