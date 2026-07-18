@@ -110,8 +110,7 @@
   /* ── pulse meter ── */
   const RED_SELECTOR = "#contact"; // section whose TOP edge the water-fill tracks
   const PULSE_API = "https://ayush-pulse.ayush2252.workers.dev";
-  const PULSE_SS = { visited: "pulse-visited-session" };
-  const PULSE_LS = { t: "pulse-thumbs-mine", tf: "pulse-thumbed" }; // per-browser thumb state only
+  const PULSE_LS = { tf: "pulse-thumbed" }; // per-browser thumb state only
 
   function pulseSetAll(metric, val) {
     document.querySelectorAll('[data-metric="' + metric + '"]').forEach((el) => { el.textContent = val; });
@@ -159,15 +158,10 @@
   });
 
   (async function pulseInit() {
+    // every page load/refresh counts as a fresh visit — no dedupe
     try {
-      const initial = await pulseFetch("/pulse");
-      pulsePaint(initial);
+      pulsePaint(await pulseFetch("/pulse/visit", { method: "POST" }));
     } catch (e) { /* leave placeholder markup as-is if the API is unreachable */ }
-
-    if (!sessionStorage.getItem(PULSE_SS.visited)) {
-      sessionStorage.setItem(PULSE_SS.visited, "1");
-      try { pulsePaint(await pulseFetch("/pulse/visit", { method: "POST" })); } catch (e) {}
-    }
 
     setInterval(() => {
       pulseFetch("/pulse").then(pulsePaint).catch(() => {});

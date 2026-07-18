@@ -3,7 +3,7 @@
  *
  * Routes:
  *   GET  /pulse           -> { visitors, downloads, thumbs }
- *   POST /pulse/visit     -> increments `visitors` once per IP per day, returns counts
+ *   POST /pulse/visit     -> increments `visitors` unconditionally (every page load counts), returns counts
  *   POST /pulse/download  -> increments `downloads`, returns counts
  *   POST /pulse/thumb     -> body { action: "inc" | "dec" }, adjusts `thumbs`, returns counts
  *
@@ -58,26 +58,8 @@ function json(data, status, cors) {
   });
 }
 
-async function hashIp(ip) {
-  const data = new TextEncoder().encode(ip);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-async function handleVisit(request, env, cors) {
-  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
-  const ipHash = await hashIp(ip);
-  const day = new Date().toISOString().slice(0, 10);
-  const dedupeKey = `visit:${ipHash}:${day}`;
-
-  const alreadySeen = await env.PULSE_KV.get(dedupeKey);
-  if (!alreadySeen) {
-    await env.PULSE_KV.put(dedupeKey, "1", { expirationTtl: 86400 });
-    await bumpCount(env, "visitors", 1);
-  }
-
+async function handleVisit(env, cors) {
+  await bumpCount(env, "visitors", 1);
   return json(await getAllCounts(env), 200, cors);
 }
 
@@ -112,7 +94,7 @@ export default {
     }
 
     if (request.method === "POST" && url.pathname === "/pulse/visit") {
-      return handleVisit(request, env, cors);
+      return handleVisit(env, cors);
     }
 
     if (request.method === "POST" && url.pathname === "/pulse/download") {

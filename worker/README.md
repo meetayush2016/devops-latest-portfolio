@@ -48,12 +48,13 @@ curl -X POST http://localhost:8787/pulse/thumb -H "Content-Type: application/jso
 
 ## Notes
 
-- `visitors` is deduped per IP (hashed, never stored raw) per calendar day,
-  so refreshing the page repeatedly doesn't inflate the count.
-- `downloads` and `thumbs` are not server-deduped — the front-end already
-  gates them (one increment per real click, and the thumb button toggles a
-  `localStorage` flag so a given browser can only be "thumbed" once at a
-  time).
+- `visitors` counts every page load/refresh, with no dedupe — reloading
+  the tab or opening it on another device both count as new visits, by
+  design.
+- `downloads` and `thumbs` are not server-deduped either — the front-end
+  gates `thumbs` client-side (the thumb button toggles a `localStorage`
+  flag so a given browser can only be "thumbed" once at a time), while
+  `downloads` increments on every real résumé-link click.
 - KV's read-modify-write isn't atomic. At portfolio-site traffic levels the
   chance of two increments racing and clobbering each other is negligible;
   if this ever needs to be bulletproof, swap the counters for a Durable

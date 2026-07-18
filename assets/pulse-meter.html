@@ -161,7 +161,6 @@
     /* ---- CONFIG ---- */
     var RED_SELECTOR = '#pulse-red';   // the element whose TOP edge the water tracks
     var PULSE_API = 'https://ayush-pulse.ayush2252.workers.dev';
-    var SS = { visited: 'pulse-visited-session' };
     var LS = { tf: 'pulse-thumbed' }; // per-browser thumb state only
 
     function setAll(metric, val){
@@ -209,11 +208,8 @@
     });
 
     /* ---- initial load + live polling ---- */
-    pulseFetch('/pulse').then(paint).catch(function(){});
-    if (!sessionStorage.getItem(SS.visited)) {
-      sessionStorage.setItem(SS.visited, '1');
-      pulseFetch('/pulse/visit', { method: 'POST' }).then(paint).catch(function(){});
-    }
+    // every page load/refresh counts as a fresh visit — no dedupe
+    pulseFetch('/pulse/visit', { method: 'POST' }).then(paint).catch(function(){});
     setInterval(function(){ pulseFetch('/pulse').then(paint).catch(function(){}); }, 25000);
 
     /* ---- scroll-driven water-fill ---- */
